@@ -19,17 +19,17 @@ namespace _Project.Scripts
         [SerializeField] private float standingHeight = 2f;
         [SerializeField] private float crouchSpeed = 2.5f;
         [SerializeField] private float cameraCrouchOffset = -0.4f;
-        
+
         [Header("View Mode")] [SerializeField] private bool startInThirdPerson = false;
         [SerializeField] private Vector3 thirdPersonCameraOffset = new Vector3(0f, 1.6f, -3f);
         [SerializeField] private float thirdPersonMouseSensitivity = 90f;
-
 
         private CharacterController _characterController;
         private Transform _cameraTransform;
 
         private float _verticalVelocity;
         private float _cameraPitch;
+        private bool _isThirdPerson;
 
         private bool _isCrouching;
         private Vector3 _cameraStandPosition;
@@ -43,10 +43,14 @@ namespace _Project.Scripts
             Cursor.visible = false;
 
             _cameraStandPosition = _cameraTransform.localPosition;
+
+            _isThirdPerson = startInThirdPerson;
+            UpdateCameraView();
         }
 
         private void Update()
         {
+            HandleViewSwitch();
             HandleCrouch();
             HandleMovement();
             HandleMouseLook();
@@ -95,7 +99,16 @@ namespace _Project.Scripts
             _cameraPitch = Mathf.Clamp(_cameraPitch, -maxLookAngle, maxLookAngle);
 
             _cameraTransform.localRotation = Quaternion.Euler(_cameraPitch, 0f, 0f);
-            transform.Rotate(Vector3.up * mouseX);
+            
+            if (!_isThirdPerson)
+            {
+                transform.Rotate(Vector3.up * mouseX);
+            }
+            else
+            {
+                transform.Rotate(Vector3.up * mouseX);
+            }
+            
         }
 
         private void HandleCrouch()
@@ -116,6 +129,14 @@ namespace _Project.Scripts
                     StopCrouch();
             }
         }
+        
+        private void HandleViewSwitch()
+        {
+            if (!Input.GetKeyDown(KeyCode.V)) return;
+            _isThirdPerson = !_isThirdPerson;
+            UpdateCameraView();
+        }
+
 
         private void StartCrouch()
         {
@@ -150,5 +171,20 @@ namespace _Project.Scripts
                 checkDistance
             );
         }
+        
+        private void UpdateCameraView()
+        {
+            if (_isThirdPerson)
+            {
+                _cameraTransform.localPosition = thirdPersonCameraOffset;
+                mouseSensitivity = thirdPersonMouseSensitivity;
+            }
+            else
+            {
+                _cameraTransform.localPosition = _cameraStandPosition;
+                mouseSensitivity = 120f;
+            }
+        }
+
     }
 }
