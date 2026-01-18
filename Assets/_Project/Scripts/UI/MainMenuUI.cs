@@ -1,14 +1,17 @@
 using UnityEngine;
 
-public class MainMenuUI : MonoBehaviour
+namespace _Project.Scripts.UI
 {
-    public GameObject mainMenuPanel;
-    public GameObject gameUIPanel;
-
-    public void StartGame()
+    public class MainMenuUI : MonoBehaviour
     {
-        mainMenuPanel.SetActive(false);
-        gameUIPanel.SetActive(true);
-        Time.timeScale = 1f;
+        public GameObject mainMenuPanel;
+        public GameObject gameUIPanel;
+
+        public void StartGame()
+        {
+            mainMenuPanel.SetActive(false);
+            gameUIPanel.SetActive(true);
+            Time.timeScale = 1f;
+        }
     }
 }

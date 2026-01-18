@@ -1,9 +1,12 @@
 using UnityEngine;
 
-public class GameStart : MonoBehaviour
+namespace _Project.Scripts.UI
 {
-    void Start()
+    public class GameStart : MonoBehaviour
     {
-        Time.timeScale = 0f;
+        void Start()
+        {
+            Time.timeScale = 0f;
+        }
     }
 }

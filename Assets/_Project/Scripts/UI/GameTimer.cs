@@ -1,32 +1,35 @@
-using UnityEngine;
 using TMPro;
+using UnityEngine;
 
-public class GameTimer : MonoBehaviour
+namespace _Project.Scripts.UI
 {
-    public float timeLeft = 120f;
-    public TextMeshProUGUI timerText;
-    public GameObject gameOverPanel;
-
-    bool gameEnded = false;
-
-    void Update()
+    public class GameTimer : MonoBehaviour
     {
-        if (gameEnded)
-            return;
+        public float timeLeft = 120f;
+        public TextMeshProUGUI timerText;
+        public GameObject gameOverPanel;
 
-        timeLeft -= Time.deltaTime;
-        timerText.text = "Time: " + Mathf.Ceil(timeLeft);
+        bool gameEnded = false;
 
-        if (timeLeft <= 0f)
+        void Update()
         {
-            GameOver();
-        }
-    }
+            if (gameEnded)
+                return;
 
-    void GameOver()
-    {
-        gameEnded = true;
-        Time.timeScale = 0f;
-        gameOverPanel.SetActive(true);
+            timeLeft -= Time.deltaTime;
+            timerText.text = "Time: " + Mathf.Ceil(timeLeft);
+
+            if (timeLeft <= 0f)
+            {
+                GameOver();
+            }
+        }
+
+        void GameOver()
+        {
+            gameEnded = true;
+            Time.timeScale = 0f;
+            gameOverPanel.SetActive(true);
+        }
     }
 }
