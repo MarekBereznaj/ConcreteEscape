@@ -8,6 +8,7 @@ UserSettings/
 
 *.csproj
 *.sln
+*.slnx
 *.user
 *.pidb
 *.booproj
