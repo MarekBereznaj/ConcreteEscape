@@ -5,9 +5,9 @@ namespace _Project.Scripts.Player
     [RequireComponent(typeof(CharacterController))]
     public class PlayerMovement : MonoBehaviour
     {
-        [Header("Movement")] [SerializeField] private float moveSpeed = 5f;
-        [SerializeField] private float sprintSpeed = 8f;
-        [SerializeField] private float jumpForce = 1.6f;
+        [Header("Movement")] [SerializeField] private float moveSpeed = 50f;
+        [SerializeField] private float sprintSpeed = 80f;
+        [SerializeField] private float jumpForce = 10.6f;
         [SerializeField] private float gravity = -9.81f;
 
         [Header("Mouse Look")] [SerializeField]

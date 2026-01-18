@@ -1,4 +1,6 @@
 using System.Collections.Generic;
+using _Project.Scripts.Game;
+using _Project.Scripts.Level;
 using UnityEngine;
 
 #if UNITY_EDITOR

@@ -1,21 +1,24 @@
 using UnityEngine;
 
-public class CoinPickup : MonoBehaviour
+namespace _Project.Scripts.Game
 {
-    public float rotateSpeed = 120f;
-
-    private void Update()
+    public class CoinPickup : MonoBehaviour
     {
-        transform.Rotate(0f, rotateSpeed * Time.deltaTime, 0f, Space.World);
-    }
+        public float rotateSpeed = 120f;
 
-    private void OnTriggerEnter(Collider other)
-    {
-        if (!other.CompareTag("Player")) return;
+        private void Update()
+        {
+            transform.Rotate(0f, rotateSpeed * Time.deltaTime, 0f, Space.World);
+        }
 
-        if (CoinManager.Instance != null)
-            CoinManager.Instance.CollectOne();
+        private void OnTriggerEnter(Collider other)
+        {
+            if (!other.CompareTag("Player")) return;
 
-        Destroy(gameObject);
+            if (CoinManager.Instance != null)
+                CoinManager.Instance.CollectOne();
+
+            Destroy(gameObject);
+        }
     }
 }
