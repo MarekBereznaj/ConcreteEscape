@@ -11,4 +11,6 @@ UserSettings/
 *.slnx
 *.user
 *.pidb
+.idea/
+.vscode/
 *.booproj
