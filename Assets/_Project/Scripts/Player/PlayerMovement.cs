@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace _Project.Scripts
+namespace _Project.Scripts.Player
 {
     [RequireComponent(typeof(CharacterController))]
     public class PlayerMovement : MonoBehaviour
@@ -33,14 +33,12 @@ namespace _Project.Scripts
 
         private bool _isCrouching;
         private Vector3 _cameraStandPosition;
-
+        
+        
         private void Awake()
         {
             _characterController = GetComponent<CharacterController>();
             _cameraTransform = GetComponentInChildren<Camera>().transform;
-
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
 
             _cameraStandPosition = _cameraTransform.localPosition;
 
@@ -185,6 +183,6 @@ namespace _Project.Scripts
                 mouseSensitivity = 120f;
             }
         }
-
+        
     }
 }
