@@ -6,7 +6,7 @@ public class ExitTrigger : MonoBehaviour
     public string playerTag = "Player";
 
     [Tooltip("Zastaví hru (Time.timeScale = 0) po dosažení cíle.")]
-    public bool freezeTimeOnWin = true;
+    public bool freezeTimeOnWin = false;
 
     private bool triggered = false;
 
