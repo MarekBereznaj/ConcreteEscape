@@ -111,9 +111,9 @@ CapsuleCollider:
   m_ProvidesContacts: 0
   m_Enabled: 1
   serializedVersion: 2
-  m_Radius: 0.5000001
-  m_Height: 2
-  m_Direction: 1
+  m_Radius: 0.1
+  m_Height: 0.1
+  m_Direction: 0
   m_Center: {x: 0.000000059604645, y: 0, z: -0.00000008940697}
 --- !u!114 &7789925194381353834
 MonoBehaviour:
@@ -128,3 +128,5 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::CoinPickup
   rotateSpeed: 120
+  pickupClip: {fileID: 8300000, guid: 45b9b7201bb32c548baa094595ca3107, type: 3}
+  volume: 1
