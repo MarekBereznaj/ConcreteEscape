@@ -24,6 +24,12 @@ namespace _Project.Scripts.Player
         [SerializeField] private Vector3 thirdPersonCameraOffset = new Vector3(0f, 1.6f, -3f);
         [SerializeField] private float thirdPersonMouseSensitivity = 90f;
 
+        [Header("Landing Effect")] 
+        [SerializeField] private float landingDipAmount = 0.15f; // Jak moc se kamera sníží
+        [SerializeField] private float landingDipDuration = 0.2f; // Jak dlouho trvá efekt
+        [SerializeField] private float minFallSpeedForEffect = -5f; // Minimální rychlost pádu pro efekt
+        [SerializeField] private AnimationCurve landingCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
+
         private CharacterController _characterController;
         private Transform _cameraTransform;
 
@@ -33,8 +39,13 @@ namespace _Project.Scripts.Player
 
         private bool _isCrouching;
         private Vector3 _cameraStandPosition;
-        
-        
+
+        private bool _wasGrounded;
+        private float _landingEffectProgress;
+        private bool _isPlayingLandingEffect;
+        private float _landingEffectIntensity;
+
+
         private void Awake()
         {
             _characterController = GetComponent<CharacterController>();
@@ -44,6 +55,8 @@ namespace _Project.Scripts.Player
 
             _isThirdPerson = startInThirdPerson;
             UpdateCameraView();
+            
+            _wasGrounded = true;
         }
 
         private void Update()
@@ -52,25 +65,35 @@ namespace _Project.Scripts.Player
             HandleCrouch();
             HandleMovement();
             HandleMouseLook();
+            HandleLandingEffect();
         }
 
         private void HandleMovement()
         {
             var inputX = Input.GetAxis("Horizontal");
             var inputZ = Input.GetAxis("Vertical");
-
             var move = transform.right * inputX + transform.forward * inputZ;
 
             if (_characterController.isGrounded)
             {
+                // Detekce dopadu
+                if (!_wasGrounded && _verticalVelocity < minFallSpeedForEffect)
+                {
+                    TriggerLandingEffect();
+                }
+
                 if (_verticalVelocity < 0f)
                     _verticalVelocity = -2f;
 
-                if (Input.GetButtonDown("Jump"))
+                if (Input.GetButtonDown("Jump") && !_isCrouching)
                     _verticalVelocity = Mathf.Sqrt(jumpForce * -2f * gravity);
             }
+            else
+            {
+                _verticalVelocity += gravity * Time.deltaTime;
+            }
 
-            _verticalVelocity += gravity * Time.deltaTime;
+            _wasGrounded = _characterController.isGrounded;
 
             var isSprinting = Input.GetKey(KeyCode.LeftShift);
             var currentSpeed = moveSpeed;
@@ -80,10 +103,8 @@ namespace _Project.Scripts.Player
             else if (isSprinting)
                 currentSpeed = sprintSpeed;
 
-
             var velocity = move * currentSpeed;
             velocity.y = _verticalVelocity;
-
 
             _characterController.Move(velocity * Time.deltaTime);
         }
@@ -97,24 +118,13 @@ namespace _Project.Scripts.Player
             _cameraPitch = Mathf.Clamp(_cameraPitch, -maxLookAngle, maxLookAngle);
 
             _cameraTransform.localRotation = Quaternion.Euler(_cameraPitch, 0f, 0f);
-            
-            if (!_isThirdPerson)
-            {
-                transform.Rotate(Vector3.up * mouseX);
-            }
-            else
-            {
-                transform.Rotate(Vector3.up * mouseX);
-            }
-            
+
+            transform.Rotate(Vector3.up * mouseX);
         }
 
         private void HandleCrouch()
         {
-            if (!_characterController.isGrounded)
-                return;
-
-            bool crouchInput = Input.GetKey(KeyCode.LeftControl);
+            var crouchInput = Input.GetKey(KeyCode.LeftControl);
 
             if (crouchInput)
             {
@@ -127,7 +137,7 @@ namespace _Project.Scripts.Player
                     StopCrouch();
             }
         }
-        
+
         private void HandleViewSwitch()
         {
             if (!Input.GetKeyDown(KeyCode.V)) return;
@@ -135,43 +145,97 @@ namespace _Project.Scripts.Player
             UpdateCameraView();
         }
 
+        private void TriggerLandingEffect()
+        {
+            // Vypočítat intenzitu podle rychlosti pádu
+            _landingEffectIntensity = Mathf.Clamp01(Mathf.Abs(_verticalVelocity) / 20f);
+            _landingEffectProgress = 0f;
+            _isPlayingLandingEffect = true;
+        }
+
+        private void HandleLandingEffect()
+        {
+            if (!_isPlayingLandingEffect) return;
+
+            _landingEffectProgress += Time.deltaTime / landingDipDuration;
+
+            if (_landingEffectProgress >= 1f)
+            {
+                _landingEffectProgress = 1f;
+                _isPlayingLandingEffect = false;
+            }
+
+            // Animace kamery dolů a zpět
+            var curveValue = landingCurve.Evaluate(_landingEffectProgress);
+            
+            var dipOffset = Mathf.Sin(curveValue * Mathf.PI) * landingDipAmount * _landingEffectIntensity;
+
+            UpdateCameraPosition(-dipOffset);
+        }
+
+        private void UpdateCameraPosition(float verticalOffset)
+        {
+            Vector3 targetPosition;
+
+            if (_isThirdPerson)
+            {
+                targetPosition = thirdPersonCameraOffset;
+            }
+            else if (_isCrouching)
+            {
+                targetPosition = _cameraStandPosition + Vector3.up * cameraCrouchOffset;
+            }
+            else
+            {
+                targetPosition = _cameraStandPosition;
+            }
+
+            targetPosition += Vector3.up * verticalOffset;
+
+            _cameraTransform.localPosition = targetPosition;
+        }
 
         private void StartCrouch()
         {
             _isCrouching = true;
-
+            
+            _characterController.enabled = false;
             _characterController.height = crouchHeight;
-            _characterController.center = new Vector3(0f, crouchHeight / 2f, 0f);
+            _characterController.enabled = true;
+            
+            _verticalVelocity = -2f;
 
-            _cameraTransform.localPosition = _cameraStandPosition + Vector3.up * cameraCrouchOffset;
+            if (!_isPlayingLandingEffect)
+            {
+                _cameraTransform.localPosition = _cameraStandPosition + Vector3.up * cameraCrouchOffset;
+            }
         }
 
         private void StopCrouch()
         {
             _isCrouching = false;
 
+            _characterController.enabled = false;
             _characterController.height = standingHeight;
-            _characterController.center = new Vector3(0f, standingHeight / 2f, 0f);
+            _characterController.enabled = true;
+            
+            _verticalVelocity = -2f;
 
-            _cameraTransform.localPosition = _cameraStandPosition;
+            if (_isPlayingLandingEffect) return;
+            _cameraTransform.localPosition = _isThirdPerson ? thirdPersonCameraOffset : _cameraStandPosition;
         }
 
         private bool CanStandUp()
         {
-            var checkDistance = standingHeight - crouchHeight;
-            var origin = transform.position + Vector3.up * crouchHeight;
-
-            return !Physics.SphereCast(
-                origin,
-                _characterController.radius,
-                Vector3.up,
-                out _,
-                checkDistance
-            );
+            var rayStart = transform.position + Vector3.up * (_characterController.height - 0.1f);
+            var checkHeight = standingHeight - crouchHeight + 0.2f;
+    
+            return !Physics.Raycast(rayStart, Vector3.up, checkHeight, ~0, QueryTriggerInteraction.Ignore);
         }
-        
+
         private void UpdateCameraView()
         {
+            if (_isPlayingLandingEffect) return;
             if (_isThirdPerson)
             {
                 _cameraTransform.localPosition = thirdPersonCameraOffset;
@@ -179,10 +243,11 @@ namespace _Project.Scripts.Player
             }
             else
             {
-                _cameraTransform.localPosition = _cameraStandPosition;
+                _cameraTransform.localPosition = _isCrouching 
+                    ? _cameraStandPosition + Vector3.up * cameraCrouchOffset 
+                    : _cameraStandPosition;
                 mouseSensitivity = 120f;
             }
         }
-        
     }
 }
