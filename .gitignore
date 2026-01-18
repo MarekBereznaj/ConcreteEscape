@@ -8,6 +8,9 @@ UserSettings/
 
 *.csproj
 *.sln
+*.slnx
 *.user
 *.pidb
+.idea/
+.vscode/
 *.booproj
