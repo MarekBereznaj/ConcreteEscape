@@ -12,6 +12,9 @@ namespace _Project.Scripts.UI
             mainMenuPanel.SetActive(false);
             gameUIPanel.SetActive(true);
             Time.timeScale = 1f;
+            
+            Cursor.lockState = CursorLockMode.Locked;
+            Cursor.visible = false;
         }
     }
 }

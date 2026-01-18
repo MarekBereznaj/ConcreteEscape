@@ -1,6 +1,6 @@
 using UnityEngine;
 
-namespace _Project.Scripts
+namespace _Project.Scripts.Player
 {
     [RequireComponent(typeof(CharacterController))]
     public class PlayerMovement : MonoBehaviour
@@ -33,16 +33,12 @@ namespace _Project.Scripts
 
         private bool _isCrouching;
         private Vector3 _cameraStandPosition;
-        private bool _isPaused;
-        private bool _inputEnabled = true;
+        
         
         private void Awake()
         {
             _characterController = GetComponent<CharacterController>();
             _cameraTransform = GetComponentInChildren<Camera>().transform;
-
-            Cursor.lockState = CursorLockMode.Locked;
-            Cursor.visible = false;
 
             _cameraStandPosition = _cameraTransform.localPosition;
 
@@ -52,14 +48,6 @@ namespace _Project.Scripts
 
         private void Update()
         {
-            if (Input.GetKeyDown(KeyCode.Escape))
-            {
-                TogglePause();
-            }
-
-            if (!_inputEnabled)
-                return;
-            
             HandleViewSwitch();
             HandleCrouch();
             HandleMovement();
@@ -196,23 +184,5 @@ namespace _Project.Scripts
             }
         }
         
-        private void TogglePause()
-        {
-            _isPaused = !_isPaused;
-            _inputEnabled = !_isPaused;
-
-            if (_isPaused)
-            {
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
-            }
-            else
-            {
-                Cursor.lockState = CursorLockMode.Locked;
-                Cursor.visible = false;
-            }
-        }
-
-
     }
 }
