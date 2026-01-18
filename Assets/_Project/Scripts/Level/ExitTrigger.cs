@@ -13,12 +13,18 @@ public class ExitTrigger : MonoBehaviour
     private void OnTriggerEnter(Collider other)
     {
         if (triggered) return;
-
-        // varianta 1: přes tag
         if (!other.CompareTag(playerTag)) return;
 
-        triggered = true;
+        // 🔒 zamkni jen když jsou coiny opravdu aktivní
+        if (CoinManager.Instance != null &&
+            CoinManager.Instance.requiredCoins > 0 &&
+            !CoinManager.Instance.AllCollected)
+        {
+            Debug.Log($"EXIT LOCKED: {CoinManager.Instance.collectedCoins}/{CoinManager.Instance.requiredCoins} coins collected");
+            return;
+        }
 
+        triggered = true;
         Debug.Log("YOU WIN! Player reached Exit.");
 
         if (freezeTimeOnWin)

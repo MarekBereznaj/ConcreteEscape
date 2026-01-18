@@ -17,42 +17,66 @@ public class MazeGenerator : MonoBehaviour
     [Min(0.5f)] public float wallHeight = 2.5f;
 
     [Header("Prefabs")]
-    public GameObject wallPrefab;   // Cube-based prefab recommended (with BoxCollider)
-    public GameObject floorPrefab;  // Cube-based prefab recommended (with BoxCollider)
+    public GameObject wallPrefab;
+    public GameObject floorPrefab;
 
-    [Header("Visuals (auto apply on generation)")]
-    public Material startMaterial;  // Mat_Start (ideálně Emission ON)
-    public Material exitMaterial;   // Mat_Exit (ideálně Emission ON)
-    public bool createExitDoor = true;
-    public Vector3 exitDoorScale = new Vector3(1.2f, 2.5f, 0.2f);
+    [Header("Materials (optional)")]
+    public Material wallMaterial;
+    public Material floorMaterial;
+    public Material startMaterial;
+    public Material exitMaterial;
 
-    [Header("Safety / Boundaries")]
-    public bool createOuterBoundary = true;
+    [Header("Floor Y")]
+    public float tileFloorY = -0.1f;
+    public float baseFloorY = -0.2f;
+
+    [Header("Safety Base Floor")]
     public bool createBigBaseFloor = true;
-    public float baseFloorExtraMarginCells = 2f; // bigger safety floor around the maze
+    public float baseFloorExtraMarginCells = 2f;
 
     [Header("Start / Exit")]
     public bool generateStartAndExit = true;
-    public float markerHeight = 1.0f; // Y height for start/exit points
+    public float markerHeight = 1.0f;
     public Vector3 exitTriggerSize = new Vector3(2f, 2f, 2f);
+    public bool createExitDoor = true;
+    public Vector3 exitDoorScale = new Vector3(1.2f, 2.5f, 0.2f);
 
-    // Internal: walls[x,y,dir] true = wall exists
+    [Header("Coins")]
+    public GameObject coinPrefab;
+    [Min(0)] public int coinCount = 10;
+
+    [Tooltip("Y offset above cell center for the coin root spawn position.")]
+    public float coinY = 0.5f;
+
+    [Tooltip("Rotate coin on X axis on its VISUAL (degrees). Use -90 for flat coin.")]
+    public float coinRotateX = -90f;
+
+    [Tooltip("Multiply coin VISUAL scale by this value on spawn.")]
+    public float coinScaleMultiplier = 3f;
+
+    [Header("Anti Z-Fighting (Walls)")]
+    [Tooltip("Small offset for walls at edges to avoid z-fighting/overlap.")]
+    public float wallEdgeEpsilon = 0.01f;
+
+    // grid
     private bool[,,] walls;
     private bool[,] visited;
 
     private enum Dir { N = 0, E = 1, S = 2, W = 3 }
 
+    // roots
     private Transform root;
     private Transform floorRoot;
     private Transform wallsRoot;
     private Transform markersRoot;
+    private Transform coinsRoot;
 
     [ContextMenu("Generate Maze")]
     public void GenerateMaze()
     {
         if (wallPrefab == null || floorPrefab == null)
         {
-            Debug.LogError("Assign Wall Prefab and Floor Prefab in the Inspector first.");
+            Debug.LogError("MazeGenerator: Assign Wall Prefab and Floor Prefab in Inspector.");
             return;
         }
 
@@ -62,7 +86,7 @@ public class MazeGenerator : MonoBehaviour
         InitGrid();
         CarveMazeDFS();
 
-        // Ensure maze is CLOSED on the perimeter (no openings outside)
+        // close perimeter, player can't leave maze through gaps
         ForcePerimeterWallsClosed();
 
         CreateChildRoots();
@@ -70,14 +94,13 @@ public class MazeGenerator : MonoBehaviour
         BuildFloorTiles();
         BuildInteriorWalls();
 
-        if (createOuterBoundary)
-            BuildOuterBoundaryWalls(); // 4 long boundary walls = no falling out
-
         if (createBigBaseFloor)
-            BuildBigBaseFloor(); // extra safety floor outside the maze
+            BuildBigBaseFloor();
 
         if (generateStartAndExit)
             BuildStartAndExit();
+        else
+            ResetCoinsRun(0);
     }
 
     [ContextMenu("Clear Generated")]
@@ -97,7 +120,7 @@ public class MazeGenerator : MonoBehaviour
             Destroy(root.GetChild(i).gameObject);
     }
 
-    // -------------------- Generation --------------------
+    // -------------------- Roots --------------------
 
     private void EnsureRoot()
     {
@@ -123,14 +146,19 @@ public class MazeGenerator : MonoBehaviour
 
         markersRoot = new GameObject("Markers").transform;
         markersRoot.SetParent(root, false);
+
+        coinsRoot = new GameObject("Coins").transform;
+        coinsRoot.SetParent(root, false);
     }
+
+    // -------------------- Generation --------------------
 
     private void InitGrid()
     {
         visited = new bool[width, height];
         walls = new bool[width, height, 4];
 
-        // start with all walls present
+        // all walls present
         for (int x = 0; x < width; x++)
         for (int y = 0; y < height; y++)
         for (int d = 0; d < 4; d++)
@@ -182,19 +210,15 @@ public class MazeGenerator : MonoBehaviour
 
     private void ForcePerimeterWallsClosed()
     {
-        // bottom row: South walls
         for (int x = 0; x < width; x++)
             walls[x, 0, (int)Dir.S] = true;
 
-        // top row: North walls
         for (int x = 0; x < width; x++)
             walls[x, height - 1, (int)Dir.N] = true;
 
-        // left col: West walls
         for (int y = 0; y < height; y++)
             walls[0, y, (int)Dir.W] = true;
 
-        // right col: East walls
         for (int y = 0; y < height; y++)
             walls[width - 1, y, (int)Dir.E] = true;
     }
@@ -206,20 +230,18 @@ public class MazeGenerator : MonoBehaviour
         for (int x = 0; x < width; x++)
         for (int y = 0; y < height; y++)
         {
-            var pos = CellCenterWorld(x, y) + new Vector3(0f, -0.1f, 0f);
+            var pos = CellCenterWorld(x, y) + new Vector3(0f, tileFloorY, 0f);
             var tile = Instantiate(floorPrefab, pos, Quaternion.identity, floorRoot);
             tile.name = $"Floor_{x}_{y}";
             tile.transform.localScale = new Vector3(cellSize, 0.2f, cellSize);
             tile.isStatic = true;
+
+            ApplyMaterial(tile, floorMaterial);
         }
     }
 
     private void BuildInteriorWalls()
     {
-        // build walls without duplicates:
-        // - create North and East for each cell
-        // - create South for y==0
-        // - create West for x==0
         for (int x = 0; x < width; x++)
         for (int y = 0; y < height; y++)
         {
@@ -236,14 +258,14 @@ public class MazeGenerator : MonoBehaviour
     {
         Vector3 pos = CellCenterWorld(x, y);
         float half = cellSize * 0.5f;
+        float eps = Mathf.Max(0f, wallEdgeEpsilon);
 
-        // shift to edge
         switch (dir)
         {
-            case Dir.N: pos += new Vector3(0f, wallHeight * 0.5f, +half); break;
-            case Dir.S: pos += new Vector3(0f, wallHeight * 0.5f, -half); break;
-            case Dir.E: pos += new Vector3(+half, wallHeight * 0.5f, 0f); break;
-            case Dir.W: pos += new Vector3(-half, wallHeight * 0.5f, 0f); break;
+            case Dir.N: pos += new Vector3(0f, wallHeight * 0.5f, +half + eps); break;
+            case Dir.S: pos += new Vector3(0f, wallHeight * 0.5f, -half - eps); break;
+            case Dir.E: pos += new Vector3(+half + eps, wallHeight * 0.5f, 0f); break;
+            case Dir.W: pos += new Vector3(-half - eps, wallHeight * 0.5f, 0f); break;
         }
 
         bool horizontal = (dir == Dir.N || dir == Dir.S);
@@ -255,56 +277,8 @@ public class MazeGenerator : MonoBehaviour
         wall.name = $"Wall_{dir}_{x}_{y}";
         wall.transform.localScale = size;
         wall.isStatic = true;
-    }
 
-    private void BuildOuterBoundaryWalls()
-    {
-        // 4 long walls around the maze => absolutely no slipping out
-        float mazeW = width * cellSize;
-        float mazeH = height * cellSize;
-
-        // center of maze in world space
-        Vector3 origin = transform.position;
-        Vector3 center = origin + new Vector3((width - 1) * cellSize * 0.5f, wallHeight * 0.5f, (height - 1) * cellSize * 0.5f);
-
-        float halfW = mazeW * 0.5f;
-        float halfH = mazeH * 0.5f;
-
-        // north wall (along X)
-        CreateBoundaryWall(
-            name: "Boundary_North",
-            pos: center + new Vector3(0f, 0f, +halfH + cellSize * 0.5f),
-            size: new Vector3(mazeW + wallThickness, wallHeight, wallThickness)
-        );
-
-        // south
-        CreateBoundaryWall(
-            name: "Boundary_South",
-            pos: center + new Vector3(0f, 0f, -halfH - cellSize * 0.5f),
-            size: new Vector3(mazeW + wallThickness, wallHeight, wallThickness)
-        );
-
-        // east (along Z)
-        CreateBoundaryWall(
-            name: "Boundary_East",
-            pos: center + new Vector3(+halfW + cellSize * 0.5f, 0f, 0f),
-            size: new Vector3(wallThickness, wallHeight, mazeH + wallThickness)
-        );
-
-        // west
-        CreateBoundaryWall(
-            name: "Boundary_West",
-            pos: center + new Vector3(-halfW - cellSize * 0.5f, 0f, 0f),
-            size: new Vector3(wallThickness, wallHeight, mazeH + wallThickness)
-        );
-    }
-
-    private void CreateBoundaryWall(string name, Vector3 pos, Vector3 size)
-    {
-        var w = Instantiate(wallPrefab, pos, Quaternion.identity, wallsRoot);
-        w.name = name;
-        w.transform.localScale = size;
-        w.isStatic = true;
+        ApplyMaterial(wall, wallMaterial);
     }
 
     private void BuildBigBaseFloor()
@@ -315,26 +289,23 @@ public class MazeGenerator : MonoBehaviour
         float extra = baseFloorExtraMarginCells * cellSize;
         Vector3 origin = transform.position;
 
-        // big base floor centered under maze
-        Vector3 center = origin + new Vector3((width - 1) * cellSize * 0.5f, -0.2f, (height - 1) * cellSize * 0.5f);
+        Vector3 center = origin + new Vector3((width - 1) * cellSize * 0.5f, baseFloorY, (height - 1) * cellSize * 0.5f);
 
         var baseFloor = Instantiate(floorPrefab, center, Quaternion.identity, floorRoot);
         baseFloor.name = "BaseFloor_Safety";
         baseFloor.transform.localScale = new Vector3(mazeW + extra, 0.2f, mazeH + extra);
         baseFloor.isStatic = true;
+
+        ApplyMaterial(baseFloor, floorMaterial);
     }
 
-    // -------------------- Start / Exit --------------------
+    // -------------------- Start / Exit / Coins --------------------
 
     private void BuildStartAndExit()
     {
-        // Start at (0,0)
         Vector2Int start = new Vector2Int(0, 0);
-
-        // Exit = farthest reachable cell from start (good gameplay)
         Vector2Int exit = FindFarthestCellFrom(start);
 
-        // Create points
         var startGo = new GameObject("StartPoint");
         startGo.transform.SetParent(markersRoot, false);
         startGo.transform.position = CellCenterWorld(start.x, start.y) + new Vector3(0f, markerHeight, 0f);
@@ -343,11 +314,10 @@ public class MazeGenerator : MonoBehaviour
         exitGo.transform.SetParent(markersRoot, false);
         exitGo.transform.position = CellCenterWorld(exit.x, exit.y) + new Vector3(0f, markerHeight, 0f);
 
-        // Visible markers (simple primitives so you always see them)
         var startMarker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         startMarker.name = "StartMarker";
         startMarker.transform.SetParent(startGo.transform, false);
-        startMarker.transform.localPosition = new Vector3(0f, -markerHeight + 0.1f, 0f);
+        startMarker.transform.localPosition = new Vector3(0f, -markerHeight + 0.12f, 0f);
         startMarker.transform.localScale = new Vector3(0.6f, 0.1f, 0.6f);
         RemoveColliderIfAny(startMarker);
         ApplyMaterial(startMarker, startMaterial);
@@ -355,25 +325,21 @@ public class MazeGenerator : MonoBehaviour
         var exitMarker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         exitMarker.name = "ExitMarker";
         exitMarker.transform.SetParent(exitGo.transform, false);
-        exitMarker.transform.localPosition = new Vector3(0f, -markerHeight + 0.1f, 0f);
+        exitMarker.transform.localPosition = new Vector3(0f, -markerHeight + 0.12f, 0f);
         exitMarker.transform.localScale = new Vector3(0.6f, 0.1f, 0.6f);
         RemoveColliderIfAny(exitMarker);
         ApplyMaterial(exitMarker, exitMaterial);
 
-        // Optional: Exit door (visual)
         if (createExitDoor)
         {
             var exitDoor = GameObject.CreatePrimitive(PrimitiveType.Cube);
             exitDoor.name = "ExitDoor";
             exitDoor.transform.SetParent(exitGo.transform, false);
-            exitDoor.transform.localPosition = new Vector3(0f, 0f, cellSize * 0.35f); // a bit in front
+            exitDoor.transform.localPosition = new Vector3(0f, 0.02f, cellSize * 0.40f);
             exitDoor.transform.localScale = exitDoorScale;
             ApplyMaterial(exitDoor, exitMaterial);
-            // collider ok (door can be solid); if you want purely visual, remove collider:
-            // RemoveColliderIfAny(exitDoor);
         }
 
-        // Exit trigger (for win)
         var trigger = new GameObject("ExitTrigger");
         trigger.transform.SetParent(exitGo.transform, false);
         trigger.transform.localPosition = Vector3.zero;
@@ -382,21 +348,86 @@ public class MazeGenerator : MonoBehaviour
         box.isTrigger = true;
         box.size = exitTriggerSize;
 
-        // Auto add the script
         var trigScript = trigger.AddComponent<ExitTrigger>();
-        // optional: ensure it matches your setup
         trigScript.playerTag = "Player";
-        trigScript.freezeTimeOnWin = true;
+        trigScript.freezeTimeOnWin = false;
+
+        SpawnCoins(start, exit);
     }
+
+    private void SpawnCoins(Vector2Int startCell, Vector2Int exitCell)
+    {
+        if (coinPrefab == null || coinCount <= 0)
+        {
+            ResetCoinsRun(0);
+            return;
+        }
+
+        int spawned = 0;
+        int tries = 0;
+        var used = new HashSet<int>();
+
+        while (spawned < coinCount && tries < coinCount * 80)
+        {
+            tries++;
+
+            int x = Random.Range(0, width);
+            int y = Random.Range(0, height);
+
+            if (x == startCell.x && y == startCell.y) continue;
+            if (x == exitCell.x && y == exitCell.y) continue;
+
+            int key = x * 10000 + y;
+            if (!used.Add(key)) continue;
+
+            // root spawn position
+            Vector3 pos = CellCenterWorld(x, y) + new Vector3(0f, coinY, 0f);
+
+            var c = Instantiate(coinPrefab, pos, Quaternion.identity, coinsRoot);
+            c.name = $"Coin_{x}_{y}";
+
+            // ✅ ALWAYS modify the VISUAL transform (renderer), not just root
+            Transform visual = GetVisualTransform(c);
+
+            // local transform relative to coin root
+            visual.localRotation = Quaternion.Euler(coinRotateX, 0f, 0f);
+            visual.localScale *= coinScaleMultiplier;
+
+            // if your prefab already has an offset, we add on top
+            visual.localPosition += Vector3.zero;
+
+            spawned++;
+        }
+
+        ResetCoinsRun(spawned);
+    }
+
+    // Finds a transform that actually renders the model (works with nested FBX)
+    private Transform GetVisualTransform(GameObject rootObj)
+    {
+        var rend = rootObj.GetComponentInChildren<Renderer>();
+        if (rend != null) return rend.transform;
+        return rootObj.transform;
+    }
+
+    private void ResetCoinsRun(int required)
+    {
+        if (CoinManager.Instance != null)
+            CoinManager.Instance.ResetRun(required);
+    }
+
+    // -------------------- Helpers --------------------
 
     private void ApplyMaterial(GameObject go, Material mat)
     {
-        if (mat == null) return;
-        var r = go.GetComponent<Renderer>();
-        if (r == null) return;
+        if (go == null || mat == null) return;
 
-        // sharedMaterial = neinstancuje materiál pro každý objekt
-        r.sharedMaterial = mat;
+        // apply to ALL renderers inside (important for FBX children)
+        var renderers = go.GetComponentsInChildren<Renderer>(true);
+        if (renderers == null || renderers.Length == 0) return;
+
+        for (int i = 0; i < renderers.Length; i++)
+            renderers[i].sharedMaterial = mat;
     }
 
     private void RemoveColliderIfAny(GameObject go)
@@ -414,7 +445,6 @@ public class MazeGenerator : MonoBehaviour
 
     private Vector2Int FindFarthestCellFrom(Vector2Int start)
     {
-        // BFS over cells using carved passages (no wall between cells)
         int[,] dist = new int[width, height];
         for (int x = 0; x < width; x++)
         for (int y = 0; y < height; y++)
@@ -442,7 +472,6 @@ public class MazeGenerator : MonoBehaviour
             }
         }
 
-        // fallback: opposite corner
         if (farthest == start)
             farthest = new Vector2Int(width - 1, height - 1);
 
@@ -451,7 +480,6 @@ public class MazeGenerator : MonoBehaviour
 
     private IEnumerable<Vector2Int> GetPassageNeighbors(Vector2Int c)
     {
-        // Passage exists if wall is false in that direction
         if (c.y + 1 < height && walls[c.x, c.y, (int)Dir.N] == false) yield return new Vector2Int(c.x, c.y + 1);
         if (c.x + 1 < width && walls[c.x, c.y, (int)Dir.E] == false) yield return new Vector2Int(c.x + 1, c.y);
         if (c.y - 1 >= 0 && walls[c.x, c.y, (int)Dir.S] == false) yield return new Vector2Int(c.x, c.y - 1);
