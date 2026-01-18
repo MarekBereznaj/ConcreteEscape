@@ -20,6 +20,12 @@ public class MazeGenerator : MonoBehaviour
     public GameObject wallPrefab;   // Cube-based prefab recommended (with BoxCollider)
     public GameObject floorPrefab;  // Cube-based prefab recommended (with BoxCollider)
 
+    [Header("Visuals (auto apply on generation)")]
+    public Material startMaterial;  // Mat_Start (ideálně Emission ON)
+    public Material exitMaterial;   // Mat_Exit (ideálně Emission ON)
+    public bool createExitDoor = true;
+    public Vector3 exitDoorScale = new Vector3(1.2f, 2.5f, 0.2f);
+
     [Header("Safety / Boundaries")]
     public bool createOuterBoundary = true;
     public bool createBigBaseFloor = true;
@@ -50,7 +56,7 @@ public class MazeGenerator : MonoBehaviour
             return;
         }
 
-        EnsureRoots();
+        EnsureRoot();
         ClearGenerated();
 
         InitGrid();
@@ -58,6 +64,8 @@ public class MazeGenerator : MonoBehaviour
 
         // Ensure maze is CLOSED on the perimeter (no openings outside)
         ForcePerimeterWallsClosed();
+
+        CreateChildRoots();
 
         BuildFloorTiles();
         BuildInteriorWalls();
@@ -75,6 +83,8 @@ public class MazeGenerator : MonoBehaviour
     [ContextMenu("Clear Generated")]
     public void ClearGenerated()
     {
+        if (root == null) return;
+
 #if UNITY_EDITOR
         if (!Application.isPlaying)
         {
@@ -89,7 +99,7 @@ public class MazeGenerator : MonoBehaviour
 
     // -------------------- Generation --------------------
 
-    private void EnsureRoots()
+    private void EnsureRoot()
     {
         if (root != null) return;
 
@@ -101,10 +111,6 @@ public class MazeGenerator : MonoBehaviour
             go.transform.SetParent(transform, false);
             root = go.transform;
         }
-
-        floorRoot = null;
-        wallsRoot = null;
-        markersRoot = null;
     }
 
     private void CreateChildRoots()
@@ -197,8 +203,6 @@ public class MazeGenerator : MonoBehaviour
 
     private void BuildFloorTiles()
     {
-        CreateChildRoots();
-
         for (int x = 0; x < width; x++)
         for (int y = 0; y < height; y++)
         {
@@ -255,7 +259,7 @@ public class MazeGenerator : MonoBehaviour
 
     private void BuildOuterBoundaryWalls()
     {
-        // 4 long walls around the maze => absolutely no slipping out between tiles
+        // 4 long walls around the maze => absolutely no slipping out
         float mazeW = width * cellSize;
         float mazeH = height * cellSize;
 
@@ -327,7 +331,7 @@ public class MazeGenerator : MonoBehaviour
         // Start at (0,0)
         Vector2Int start = new Vector2Int(0, 0);
 
-        // Exit = farthest reachable cell from start (nice gameplay)
+        // Exit = farthest reachable cell from start (good gameplay)
         Vector2Int exit = FindFarthestCellFrom(start);
 
         // Create points
@@ -345,14 +349,29 @@ public class MazeGenerator : MonoBehaviour
         startMarker.transform.SetParent(startGo.transform, false);
         startMarker.transform.localPosition = new Vector3(0f, -markerHeight + 0.1f, 0f);
         startMarker.transform.localScale = new Vector3(0.6f, 0.1f, 0.6f);
-        DestroyImmediate(startMarker.GetComponent<Collider>()); // marker collider not needed
+        RemoveColliderIfAny(startMarker);
+        ApplyMaterial(startMarker, startMaterial);
 
         var exitMarker = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
         exitMarker.name = "ExitMarker";
         exitMarker.transform.SetParent(exitGo.transform, false);
         exitMarker.transform.localPosition = new Vector3(0f, -markerHeight + 0.1f, 0f);
         exitMarker.transform.localScale = new Vector3(0.6f, 0.1f, 0.6f);
-        DestroyImmediate(exitMarker.GetComponent<Collider>());
+        RemoveColliderIfAny(exitMarker);
+        ApplyMaterial(exitMarker, exitMaterial);
+
+        // Optional: Exit door (visual)
+        if (createExitDoor)
+        {
+            var exitDoor = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            exitDoor.name = "ExitDoor";
+            exitDoor.transform.SetParent(exitGo.transform, false);
+            exitDoor.transform.localPosition = new Vector3(0f, 0f, cellSize * 0.35f); // a bit in front
+            exitDoor.transform.localScale = exitDoorScale;
+            ApplyMaterial(exitDoor, exitMaterial);
+            // collider ok (door can be solid); if you want purely visual, remove collider:
+            // RemoveColliderIfAny(exitDoor);
+        }
 
         // Exit trigger (for win)
         var trigger = new GameObject("ExitTrigger");
@@ -362,6 +381,35 @@ public class MazeGenerator : MonoBehaviour
         var box = trigger.AddComponent<BoxCollider>();
         box.isTrigger = true;
         box.size = exitTriggerSize;
+
+        // Auto add the script
+        var trigScript = trigger.AddComponent<ExitTrigger>();
+        // optional: ensure it matches your setup
+        trigScript.playerTag = "Player";
+        trigScript.freezeTimeOnWin = true;
+    }
+
+    private void ApplyMaterial(GameObject go, Material mat)
+    {
+        if (mat == null) return;
+        var r = go.GetComponent<Renderer>();
+        if (r == null) return;
+
+        // sharedMaterial = neinstancuje materiál pro každý objekt
+        r.sharedMaterial = mat;
+    }
+
+    private void RemoveColliderIfAny(GameObject go)
+    {
+        var c = go.GetComponent<Collider>();
+#if UNITY_EDITOR
+        if (!Application.isPlaying)
+        {
+            if (c != null) DestroyImmediate(c);
+            return;
+        }
+#endif
+        if (c != null) Destroy(c);
     }
 
     private Vector2Int FindFarthestCellFrom(Vector2Int start)
