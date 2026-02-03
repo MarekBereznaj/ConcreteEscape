@@ -1,3 +1,4 @@
+using System;
 using UnityEngine;
 
 namespace _Project.Scripts.Player
@@ -5,29 +6,31 @@ namespace _Project.Scripts.Player
     [RequireComponent(typeof(CharacterController))]
     public class PlayerMovement : MonoBehaviour
     {
-        [Header("Movement")] [SerializeField] private float moveSpeed = 50f;
+        [Header("Movement")]
+        [SerializeField] private float moveSpeed = 50f;
         [SerializeField] private float sprintSpeed = 80f;
         [SerializeField] private float jumpForce = 10.6f;
         [SerializeField] private float gravity = -9.81f;
 
-        [Header("Mouse Look")] [SerializeField]
-        private float mouseSensitivity = 120f;
-
+        [Header("Mouse Look")]
+        [SerializeField] private float mouseSensitivity = 120f;
         [SerializeField] private float maxLookAngle = 80f;
 
-        [Header("Crouch")] [SerializeField] private float crouchHeight = 1.2f;
-        [SerializeField] private float standingHeight = 4f;
+        [Header("Crouch")]
+        [SerializeField] private float crouchHeight = 1.2f;
+        [SerializeField] private float standingHeight = 2f;
         [SerializeField] private float crouchSpeed = 2.5f;
         [SerializeField] private float cameraCrouchOffset = -0.4f;
 
-        [Header("View Mode")] [SerializeField] private bool startInThirdPerson = false;
+        [Header("View Mode")]
+        [SerializeField] private bool startInThirdPerson = false;
         [SerializeField] private Vector3 thirdPersonCameraOffset = new Vector3(0f, 1.6f, -3f);
         [SerializeField] private float thirdPersonMouseSensitivity = 90f;
 
-        [Header("Landing Effect")] 
-        [SerializeField] private float landingDipAmount = 0.15f; // Jak moc se kamera sníží
-        [SerializeField] private float landingDipDuration = 0.2f; // Jak dlouho trvá efekt
-        [SerializeField] private float minFallSpeedForEffect = -5f; // Minimální rychlost pádu pro efekt
+        [Header("Landing Effect")]
+        [SerializeField] private float landingDipAmount = 0.15f;
+        [SerializeField] private float landingDipDuration = 0.2f;
+        [SerializeField] private float minFallSpeedForEffect = -5f;
         [SerializeField] private AnimationCurve landingCurve = AnimationCurve.EaseInOut(0, 0, 1, 1);
 
         private CharacterController _characterController;
@@ -45,6 +48,25 @@ namespace _Project.Scripts.Player
         private bool _isPlayingLandingEffect;
         private float _landingEffectIntensity;
 
+        // ========= Pro animace (čte PlayerAnimationController) =========
+        public Vector3 Velocity => _characterController != null ? _characterController.velocity : Vector3.zero;
+        public bool IsGrounded => _characterController != null && _characterController.isGrounded;
+        public bool IsCrouching => _isCrouching;
+
+        public float CurrentMaxSpeed
+        {
+            get
+            {
+                if (_isCrouching) return crouchSpeed;
+
+                float vz = Input.GetAxis("Vertical");
+                bool sprint = Input.GetKey(KeyCode.LeftShift) && vz > 0.1f;
+
+                return sprint ? sprintSpeed : moveSpeed;
+            }
+        }
+
+        public event Action OnJump;
 
         private void Awake()
         {
@@ -55,7 +77,7 @@ namespace _Project.Scripts.Player
 
             _isThirdPerson = startInThirdPerson;
             UpdateCameraView();
-            
+
             _wasGrounded = true;
         }
 
@@ -70,40 +92,50 @@ namespace _Project.Scripts.Player
 
         private void HandleMovement()
         {
-            var inputX = Input.GetAxis("Horizontal");
-            var inputZ = Input.GetAxis("Vertical");
-            var move = transform.right * inputX + transform.forward * inputZ;
+            float inputX = Input.GetAxis("Horizontal");
+            float inputZ = Input.GetAxis("Vertical");
 
-            if (_characterController.isGrounded)
+            Vector3 move = transform.right * inputX + transform.forward * inputZ;
+            move = Vector3.ClampMagnitude(move, 1f);
+
+            bool grounded = _characterController.isGrounded;
+
+            if (grounded)
             {
-                // Detekce dopadu
+                // Dopad (landing effect)
                 if (!_wasGrounded && _verticalVelocity < minFallSpeedForEffect)
                 {
                     TriggerLandingEffect();
                 }
 
+                // "přilepení" k zemi
                 if (_verticalVelocity < 0f)
                     _verticalVelocity = -2f;
 
+                // Skok
                 if (Input.GetButtonDown("Jump") && !_isCrouching)
+                {
                     _verticalVelocity = Mathf.Sqrt(jumpForce * -2f * gravity);
+                    OnJump?.Invoke();
+                }
             }
             else
             {
+                // Gravitace
                 _verticalVelocity += gravity * Time.deltaTime;
             }
 
-            _wasGrounded = _characterController.isGrounded;
+            _wasGrounded = grounded;
 
-            var isSprinting = Input.GetKey(KeyCode.LeftShift);
-            var currentSpeed = moveSpeed;
+            bool isSprinting = Input.GetKey(KeyCode.LeftShift) && inputZ > 0.1f && !_isCrouching;
 
+            float currentSpeed = moveSpeed;
             if (_isCrouching)
                 currentSpeed = crouchSpeed;
             else if (isSprinting)
                 currentSpeed = sprintSpeed;
 
-            var velocity = move * currentSpeed;
+            Vector3 velocity = move * currentSpeed;
             velocity.y = _verticalVelocity;
 
             _characterController.Move(velocity * Time.deltaTime);
@@ -111,20 +143,21 @@ namespace _Project.Scripts.Player
 
         private void HandleMouseLook()
         {
-            var mouseX = Input.GetAxis("Mouse X") * mouseSensitivity * Time.deltaTime;
-            var mouseY = Input.GetAxis("Mouse Y") * mouseSensitivity * Time.deltaTime;
+            float currentSensitivity = _isThirdPerson ? thirdPersonMouseSensitivity : mouseSensitivity;
+
+            float mouseX = Input.GetAxis("Mouse X") * currentSensitivity * Time.deltaTime;
+            float mouseY = Input.GetAxis("Mouse Y") * currentSensitivity * Time.deltaTime;
 
             _cameraPitch -= mouseY;
             _cameraPitch = Mathf.Clamp(_cameraPitch, -maxLookAngle, maxLookAngle);
 
             _cameraTransform.localRotation = Quaternion.Euler(_cameraPitch, 0f, 0f);
-
             transform.Rotate(Vector3.up * mouseX);
         }
 
         private void HandleCrouch()
         {
-            var crouchInput = Input.GetKey(KeyCode.LeftControl);
+            bool crouchInput = Input.GetKey(KeyCode.LeftControl);
 
             if (crouchInput)
             {
@@ -141,13 +174,13 @@ namespace _Project.Scripts.Player
         private void HandleViewSwitch()
         {
             if (!Input.GetKeyDown(KeyCode.V)) return;
+
             _isThirdPerson = !_isThirdPerson;
             UpdateCameraView();
         }
 
         private void TriggerLandingEffect()
         {
-            // Vypočítat intenzitu podle rychlosti pádu
             _landingEffectIntensity = Mathf.Clamp01(Mathf.Abs(_verticalVelocity) / 20f);
             _landingEffectProgress = 0f;
             _isPlayingLandingEffect = true;
@@ -165,10 +198,8 @@ namespace _Project.Scripts.Player
                 _isPlayingLandingEffect = false;
             }
 
-            // Animace kamery dolů a zpět
-            var curveValue = landingCurve.Evaluate(_landingEffectProgress);
-            
-            var dipOffset = Mathf.Sin(curveValue * Mathf.PI) * landingDipAmount * _landingEffectIntensity;
+            float curveValue = landingCurve.Evaluate(_landingEffectProgress);
+            float dipOffset = Mathf.Sin(curveValue * Mathf.PI) * landingDipAmount * _landingEffectIntensity;
 
             UpdateCameraPosition(-dipOffset);
         }
@@ -191,24 +222,21 @@ namespace _Project.Scripts.Player
             }
 
             targetPosition += Vector3.up * verticalOffset;
-
             _cameraTransform.localPosition = targetPosition;
         }
 
         private void StartCrouch()
         {
             _isCrouching = true;
-            
+
             _characterController.enabled = false;
             _characterController.height = crouchHeight;
             _characterController.enabled = true;
-            
+
             _verticalVelocity = -2f;
 
             if (!_isPlayingLandingEffect)
-            {
                 _cameraTransform.localPosition = _cameraStandPosition + Vector3.up * cameraCrouchOffset;
-            }
         }
 
         private void StopCrouch()
@@ -218,7 +246,7 @@ namespace _Project.Scripts.Player
             _characterController.enabled = false;
             _characterController.height = standingHeight;
             _characterController.enabled = true;
-            
+
             _verticalVelocity = -2f;
 
             if (_isPlayingLandingEffect) return;
@@ -227,26 +255,25 @@ namespace _Project.Scripts.Player
 
         private bool CanStandUp()
         {
-            var rayStart = transform.position + Vector3.up * (_characterController.height - 0.1f);
-            var checkHeight = standingHeight - crouchHeight + 0.2f;
-    
+            Vector3 rayStart = transform.position + Vector3.up * (_characterController.height - 0.1f);
+            float checkHeight = standingHeight - crouchHeight + 0.2f;
+
             return !Physics.Raycast(rayStart, Vector3.up, checkHeight, ~0, QueryTriggerInteraction.Ignore);
         }
 
         private void UpdateCameraView()
         {
             if (_isPlayingLandingEffect) return;
+
             if (_isThirdPerson)
             {
                 _cameraTransform.localPosition = thirdPersonCameraOffset;
-                mouseSensitivity = thirdPersonMouseSensitivity;
             }
             else
             {
-                _cameraTransform.localPosition = _isCrouching 
-                    ? _cameraStandPosition + Vector3.up * cameraCrouchOffset 
+                _cameraTransform.localPosition = _isCrouching
+                    ? _cameraStandPosition + Vector3.up * cameraCrouchOffset
                     : _cameraStandPosition;
-                mouseSensitivity = 120f;
             }
         }
     }
