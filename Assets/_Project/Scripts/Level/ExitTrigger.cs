@@ -1,5 +1,6 @@
 using System.Collections;
 using _Project.Scripts.Game;
+using _Project.Scripts.UI;
 using TMPro;
 using UnityEngine;
 using UnityEngine.SceneManagement;
@@ -25,6 +26,9 @@ namespace _Project.Scripts.Level
 
         private bool triggered = false;
         private bool showingMessage = false;
+        
+        [SerializeField] private MonoBehaviour playerController;
+        [SerializeField] private GameTimer gameTimer;
 
         private void Start()
         {
@@ -69,47 +73,67 @@ namespace _Project.Scripts.Level
             if (triggered) return;
             triggered = true;
 
+            if (infoText != null)
+                infoText.gameObject.SetActive(false);
+
             Debug.Log("🎉 YOU WIN!");
 
-            // Zobrazit win screen
-            ShowWinScreen();
-
-            // Zmrazit čas
-            if (freezeTimeOnWin)
+            if (gameTimer == null)
             {
-                Time.timeScale = 0f;
-                Cursor.lockState = CursorLockMode.None;
-                Cursor.visible = true;
+                Debug.LogError("GameTimer NOT assigned in ExitTrigger!");
+                return;
             }
 
-            // Načíst další level
-            if (loadNextLevel && !string.IsNullOrEmpty(nextLevelName))
-            {
-                StartCoroutine(LoadNextLevelRoutine());
-            }
+            gameTimer.ShowEndScreen(true);
+        }
+
+        
+        private void QuitGame()
+        {
+            Time.timeScale = 1f;
+            Application.Quit();
+        }
+        private IEnumerator QuitAfterDelay()
+        {
+            yield return new WaitForSecondsRealtime(2f);
+            QuitGame();
+        }
+
+        public void SetGameTimer(GameTimer timer)
+        {
+            gameTimer = timer;
+        }
+        
+        public void SetInfoText(TextMeshProUGUI text)
+        {
+            infoText = text;
         }
 
         private void ShowWinScreen()
         {
-            // Skrýt info text
             if (infoText != null)
                 infoText.gameObject.SetActive(false);
 
-            // Zobrazit win panel
             if (winPanel != null)
-            {
                 winPanel.SetActive(true);
-                
-                if (winText != null)
+
+            if (winText != null)
+            {
+                winText.gameObject.SetActive(true);
+                winText.color = Color.red;
+                winText.fontSizeMax = 50;
+                winText.fontStyle = FontStyles.Bold;
+                winText.alpha = 1f;
+
+                if (CoinManager.Instance != null)
                 {
-                    if (CoinManager.Instance != null)
-                    {
-                        winText.text = $"YOU WIN!\n\nSCORE: {CoinManager.Instance.collectedCoins}/{CoinManager.Instance.requiredCoins}";
-                    }
-                    else
-                    {
-                        winText.text = "YOU WIN!";
-                    }
+                    winText.text =
+                        "<b>YOU WIN!</b>\n\n" +
+                        $"SCORE: {CoinManager.Instance.collectedCoins}/{CoinManager.Instance.requiredCoins}";
+                }
+                else
+                {
+                    winText.text = "YOU WIN!";
                 }
             }
         }
