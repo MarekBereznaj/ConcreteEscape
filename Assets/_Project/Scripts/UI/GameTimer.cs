@@ -43,7 +43,7 @@ namespace _Project.Scripts.UI
 
             if (won)
             {
-                gameOverText.text = "YOU WIN";
+                gameOverText.text = "YOU WIN NIGGA";
                 gameOverText.color = Color.green;
             }
             else

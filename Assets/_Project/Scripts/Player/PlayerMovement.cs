@@ -16,7 +16,7 @@ namespace _Project.Scripts.Player
         [SerializeField] private float maxLookAngle = 80f;
 
         [Header("Crouch")] [SerializeField] private float crouchHeight = 1.2f;
-        [SerializeField] private float standingHeight = 2f;
+        [SerializeField] private float standingHeight = 4f;
         [SerializeField] private float crouchSpeed = 2.5f;
         [SerializeField] private float cameraCrouchOffset = -0.4f;
 
