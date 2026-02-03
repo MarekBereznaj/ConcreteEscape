@@ -16,6 +16,13 @@ namespace _Project.Scripts.Game
         public bool AllCollected => requiredCoins > 0 && collectedCoins >= requiredCoins;
 
 
+        private void Start()
+        {
+            // Auto-detect všech coinů
+            var allCoins = FindObjectsOfType<CoinPickup>();
+            ResetRun(allCoins.Length);
+        }
+        
         private void Awake()
         {
             if (Instance != null && Instance != this)

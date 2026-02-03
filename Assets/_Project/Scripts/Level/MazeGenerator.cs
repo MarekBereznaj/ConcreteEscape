@@ -1,6 +1,8 @@
 using System.Collections.Generic;
 using _Project.Scripts.Game;
 using _Project.Scripts.Level;
+using _Project.Scripts.UI;
+using TMPro;
 using UnityEngine;
 
 #if UNITY_EDITOR
@@ -9,42 +11,34 @@ using UnityEditor;
 
 public class MazeGenerator : MonoBehaviour
 {
-    [Header("Maze Size")]
-    [Min(2)] public int width = 15;
+    [Header("Maze Size")] [Min(2)] public int width = 15;
     [Min(2)] public int height = 15;
 
-    [Header("Cell Settings")]
-    [Min(0.5f)] public float cellSize = 3f;
+    [Header("Cell Settings")] [Min(0.5f)] public float cellSize = 3f;
     [Min(0.1f)] public float wallThickness = 0.3f;
     [Min(0.5f)] public float wallHeight = 2.5f;
 
-    [Header("Prefabs")]
-    public GameObject wallPrefab;
+    [Header("Prefabs")] public GameObject wallPrefab;
     public GameObject floorPrefab;
 
-    [Header("Materials (optional)")]
-    public Material wallMaterial;
+    [Header("Materials (optional)")] public Material wallMaterial;
     public Material floorMaterial;
     public Material startMaterial;
     public Material exitMaterial;
 
-    [Header("Floor Y")]
-    public float tileFloorY = -0.1f;
+    [Header("Floor Y")] public float tileFloorY = -0.1f;
     public float baseFloorY = -0.2f;
 
-    [Header("Safety Base Floor")]
-    public bool createBigBaseFloor = true;
+    [Header("Safety Base Floor")] public bool createBigBaseFloor = true;
     public float baseFloorExtraMarginCells = 2f;
 
-    [Header("Start / Exit")]
-    public bool generateStartAndExit = true;
+    [Header("Start / Exit")] public bool generateStartAndExit = true;
     public float markerHeight = 1.0f;
     public Vector3 exitTriggerSize = new Vector3(2f, 2f, 2f);
     public bool createExitDoor = true;
     public Vector3 exitDoorScale = new Vector3(1.2f, 2.5f, 0.2f);
 
-    [Header("Coins")]
-    public GameObject coinPrefab;
+    [Header("Coins")] public GameObject coinPrefab;
     [Min(0)] public int coinCount = 10;
 
     [Tooltip("Y offset above cell center for the coin root spawn position.")]
@@ -56,15 +50,25 @@ public class MazeGenerator : MonoBehaviour
     [Tooltip("Multiply coin VISUAL scale by this value on spawn.")]
     public float coinScaleMultiplier = 3f;
 
-    [Header("Anti Z-Fighting (Walls)")]
-    [Tooltip("Small offset for walls at edges to avoid z-fighting/overlap.")]
+    [Header("Anti Z-Fighting (Walls)")] [Tooltip("Small offset for walls at edges to avoid z-fighting/overlap.")]
     public float wallEdgeEpsilon = 0.01f;
+
+    [Header("Exit Trigger UI References")]
+    [SerializeField] private TextMeshProUGUI exitInfoText;
+    [SerializeField] private GameTimer gameTimer;
+
 
     // grid
     private bool[,,] walls;
     private bool[,] visited;
 
-    private enum Dir { N = 0, E = 1, S = 2, W = 3 }
+    private enum Dir
+    {
+        N = 0,
+        E = 1,
+        S = 2,
+        W = 3
+    }
 
     // roots
     private Transform root;
@@ -291,7 +295,8 @@ public class MazeGenerator : MonoBehaviour
         float extra = baseFloorExtraMarginCells * cellSize;
         Vector3 origin = transform.position;
 
-        Vector3 center = origin + new Vector3((width - 1) * cellSize * 0.5f, baseFloorY, (height - 1) * cellSize * 0.5f);
+        Vector3 center =
+            origin + new Vector3((width - 1) * cellSize * 0.5f, baseFloorY, (height - 1) * cellSize * 0.5f);
 
         var baseFloor = Instantiate(floorPrefab, center, Quaternion.identity, floorRoot);
         baseFloor.name = "BaseFloor_Safety";
@@ -312,7 +317,7 @@ public class MazeGenerator : MonoBehaviour
         startGo.transform.SetParent(markersRoot, false);
         startGo.transform.position = CellCenterWorld(start.x, start.y) + new Vector3(0f, markerHeight, 0f);
 
-        var exitGo = new GameObject("ExitPoint");
+        var exitGo = new GameObject("ExitPoivnt");
         exitGo.transform.SetParent(markersRoot, false);
         exitGo.transform.position = CellCenterWorld(exit.x, exit.y) + new Vector3(0f, markerHeight, 0f);
 
@@ -352,10 +357,22 @@ public class MazeGenerator : MonoBehaviour
 
         var trigScript = trigger.AddComponent<ExitTrigger>();
         trigScript.playerTag = "Player";
-        trigScript.freezeTimeOnWin = false;
-
+        trigScript.infoText = exitInfoText;
+        trigScript.SetGameTimer(gameTimer);
+   
         SpawnCoins(start, exit);
     }
+
+    private void Awake()
+    {
+        gameTimer = FindObjectOfType<GameTimer>();
+
+        if (gameTimer == null)
+        {
+            Debug.LogError("MazeGenerator: GameTimer not found at runtime!");
+        }
+    }
+
 
     private void SpawnCoins(Vector2Int startCell, Vector2Int exitCell)
     {
